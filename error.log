@@ -1,0 +1,1 @@
+[2024-10-14 00:06:04] Error en acortar.php: SQLSTATE[23000]: Integrity constraint violation: 1048 Column 'user_id' cannot be null

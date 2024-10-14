@@ -19,35 +19,41 @@ try {
 }
 
 // Sanitización de entrada de usuario
-$codigo = isset($_GET['c']) ? htmlspecialchars($_GET['c']) : '';
+$codigo = isset($_GET['c']) ? $_GET['c'] : '';
 
 $urlOriginal = '';
 $error = '';
 
 if ($codigo) {
-    $stmt = $pdo->prepare("SELECT url_original, expiration_date, password FROM enlaces WHERE codigo = ?");
+    // Primero, verificar si el código está en la tabla de enlaces eliminados
+    $stmt = $pdo->prepare("SELECT 1 FROM enlaces_eliminados WHERE codigo = ?");
     $stmt->execute([$codigo]);
-    $resultado = $stmt->fetch();
-    
-    if ($resultado) {
-        if ($resultado['expiration_date'] && strtotime($resultado['expiration_date']) < time()) {
-            $error = "Este enlace ha expirado.";
-        } elseif ($resultado['url_original'] === 'DELETED') {
-            $error = "Esta URL acortada ha sido eliminada.";
-        } elseif ($resultado['password']) {
-            if (!isset($_POST['password'])) {
-                include 'password_form.php';
-                exit;
-            } elseif (!password_verify($_POST['password'], $resultado['password'])) {
-                $error = "Contraseña incorrecta.";
+    if ($stmt->fetchColumn()) {
+        $error = "Esta URL acortada ha sido eliminada.";
+    } else {
+        // Si no está en la tabla de eliminados, buscar en la tabla principal
+        $stmt = $pdo->prepare("SELECT url_original, expiration_date, password FROM enlaces WHERE codigo = ?");
+        $stmt->execute([$codigo]);
+        $resultado = $stmt->fetch();
+        
+        if ($resultado) {
+            if ($resultado['expiration_date'] && strtotime($resultado['expiration_date']) < time()) {
+                $error = "Este enlace ha expirado.";
+            } elseif ($resultado['password']) {
+                if (!isset($_POST['password'])) {
+                    include 'password_form.php';
+                    exit;
+                } elseif (!password_verify($_POST['password'], $resultado['password'])) {
+                    $error = "Contraseña incorrecta.";
+                } else {
+                    $urlOriginal = $resultado['url_original'];
+                }
             } else {
                 $urlOriginal = $resultado['url_original'];
             }
         } else {
-            $urlOriginal = $resultado['url_original'];
+            $error = "URL no encontrada.";
         }
-    } else {
-        $error = "URL no encontrada.";
     }
 } else {
     $error = "Código no proporcionado.";

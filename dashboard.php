@@ -23,8 +23,32 @@ $enlaces = $stmt->fetchAll();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
     $enlace_id = filter_input(INPUT_POST, 'delete', FILTER_VALIDATE_INT);
     if ($enlace_id) {
-        $stmt = $pdo->prepare("UPDATE enlaces SET url_original = 'DELETED' WHERE id = ? AND user_id = ?");
-        $stmt->execute([$enlace_id, $user_id]);
+        // Iniciar una transacción
+        $pdo->beginTransaction();
+        
+        try {
+            // Obtener el código del enlace
+            $stmt = $pdo->prepare("SELECT codigo FROM enlaces WHERE id = ? AND user_id = ?");
+            $stmt->execute([$enlace_id, $user_id]);
+            $codigo = $stmt->fetchColumn();
+            
+            if ($codigo) {
+                // Eliminar el enlace de la tabla principal
+                $stmt = $pdo->prepare("DELETE FROM enlaces WHERE id = ? AND user_id = ?");
+                $stmt->execute([$enlace_id, $user_id]);
+                
+                // Insertar el código en la tabla de enlaces eliminados
+                $stmt = $pdo->prepare("INSERT INTO enlaces_eliminados (codigo) VALUES (?)");
+                $stmt->execute([$codigo]);
+                
+                // Confirmar la transacción
+                $pdo->commit();
+            }
+        } catch (Exception $e) {
+            // Si algo sale mal, revertir la transacción
+            $pdo->rollBack();
+            error_log("Error al eliminar enlace: " . $e->getMessage());
+        }
     }
     header("Location: dashboard.php");
     exit;
@@ -148,8 +172,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
                                 <tr>
                                     <td class="mdl-data-table__cell--non-numeric"><?= htmlspecialchars($enlace['url_original']) ?></td>
                                     <td>
-                                        <a href="r.php?c=<?= $enlace['codigo'] ?>" target="_blank">
-                                            <?= 'http://' . $_SERVER['HTTP_HOST'] . '/r.php?c=' . $enlace['codigo'] ?>
+                                        <a href="<?= $enlace['codigo'] ?>" target="_blank">
+                                            <?= 'http://' . $_SERVER['HTTP_HOST'] . '/' . $enlace['codigo'] ?>
                                         </a>
                                     </td>
                                     <td>
@@ -443,7 +467,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
                         const newRow = tabla.insertRow(0);
                         newRow.innerHTML = `
                             <td class="mdl-data-table__cell--non-numeric">${urlOriginal}</td>
-                            <td><a href="${data.url}" target="_blank">${data.url}</a></td>
+                             <td><a href="${data.url}" target="_blank">${data.url.replace('http://', '')}</a></td>
                             <td>${data.expirationDateTime ? data.expirationDateTime : 'No expira'}</td>
                             <td>
                                 <button class="mdl-button mdl-js-button mdl-button--icon mdl-button--colored" onclick="openEditModal(${data.id}, '${urlOriginal}')">
