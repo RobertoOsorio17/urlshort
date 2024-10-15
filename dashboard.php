@@ -14,6 +14,13 @@ if (!isset($_SESSION['csrf_token'])) {
 
 $user_id = $_SESSION['user_id'];
 
+// Manejar la asociación de enlaces
+$showAssociateModal = false;
+if (isset($_GET['associate']) && isset($_SESSION['associationToken'])) {
+    $showAssociateModal = true;
+    $associationToken = $_SESSION['associationToken'];
+}
+
 // Obtener los enlaces del usuario
 $stmt = $pdo->prepare("SELECT id, codigo, url_original, expiration_date, CASE WHEN password IS NOT NULL THEN 1 ELSE 0 END as has_password FROM enlaces WHERE user_id = ? ORDER BY id DESC");
 $stmt->execute([$user_id]);
@@ -52,6 +59,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
     }
     header("Location: dashboard.php");
     exit;
+}
+
+// Al principio del archivo
+if (isset($_GET['associate']) && isset($_SESSION['associationToken'])) {
+    $showAssociateModal = true;
+    $associationToken = $_SESSION['associationToken'];
+    // No elimines el token aquí, lo haremos después de asociar el enlace
+} else {
+    $showAssociateModal = false;
 }
 ?>
 
@@ -293,6 +309,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
         <div class="mdl-dialog__actions">
             <button type="button" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect" onclick="submitShortenForm()">Acortar</button>
             <button type="button" class="mdl-button mdl-js-button mdl-js-ripple-effect close" onclick="closeShortenModal()">Cancelar</button>
+        </div>
+    </dialog>
+
+    <!-- Añade este modal al final del body -->
+    <dialog class="mdl-dialog" id="associate-modal">
+        <h4 class="mdl-dialog__title">Asociar enlace</h4>
+        <div class="mdl-dialog__content">
+            <p>¿Estás seguro de que quieres asociar este enlace a tu cuenta?</p>
+        </div>
+        <div class="mdl-dialog__actions">
+            <button type="button" class="mdl-button confirm-associate">Asociar</button>
+            <button type="button" class="mdl-button close">Cancelar</button>
         </div>
     </dialog>
 
@@ -540,6 +568,102 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
                 document.getElementById('deleteId').value = id;
                 deleteDialog.showModal();
             };
+
+            // Añade esto después de las otras funciones en el script
+            function associateGuestLink(index) {
+                const encryptedLinks = localStorage.getItem('guest_links');
+                if (encryptedLinks) {
+                    decryptData(encryptedLinks)
+                        .then(decryptedData => {
+                            const guestLinks = JSON.parse(decryptedData);
+                            const linkToAssociate = guestLinks[index];
+                            
+                            // Generar un token único para esta operación
+                            const associationToken = Math.random().toString(36).substr(2, 9);
+                            
+                            // Almacenar el token y el enlace en sessionStorage
+                            sessionStorage.setItem('associationToken', associationToken);
+                            sessionStorage.setItem('linkToAssociate', JSON.stringify(linkToAssociate));
+                            
+                            // Mostrar el modal de login/registro
+                            showLoginModal(associationToken);
+                        })
+                        .catch(error => {
+                            console.error('Error al procesar el enlace de invitado:', error);
+                        });
+                }
+            }
+
+            function showLoginModal(token) {
+                const dialog = document.querySelector('#login-modal');
+                if (!dialog.showModal) {
+                    dialogPolyfill.registerDialog(dialog);
+                }
+                dialog.querySelector('#login-link').onclick = function(e) {
+                    e.preventDefault();
+                    window.location.href = `login.php?token=${token}`;
+                };
+                dialog.querySelector('#register-link').onclick = function(e) {
+                    e.preventDefault();
+                    window.location.href = `registro.php?token=${token}`;
+                };
+                dialog.showModal();
+            }
+
+            <?php if ($showAssociateModal): ?>
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('DOMContentLoaded event fired');
+                console.log('showAssociateModal:', <?php echo json_encode($showAssociateModal); ?>);
+                console.log('associationToken:', <?php echo json_encode($associationToken); ?>);
+                console.log('linkToAssociate:', sessionStorage.getItem('linkToAssociate'));
+
+                const linkToAssociate = JSON.parse(sessionStorage.getItem('linkToAssociate'));
+                if (linkToAssociate) {
+                    const dialog = document.querySelector('#associate-modal');
+                    if (!dialog.showModal) {
+                        dialogPolyfill.registerDialog(dialog);
+                    }
+                    dialog.querySelector('.confirm-associate').onclick = function() {
+                        associateLinkToAccount(linkToAssociate);
+                        dialog.close();
+                    };
+                    dialog.querySelector('.close').onclick = function() {
+                        dialog.close();
+                        sessionStorage.removeItem('linkToAssociate');
+                        sessionStorage.removeItem('associationToken');
+                        <?php unset($_SESSION['associationToken']); ?>
+                    };
+                    dialog.showModal();
+                }
+            });
+
+            function associateLinkToAccount(link) {
+                fetch('associate_link.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': '<?php echo $_SESSION["csrf_token"]; ?>'
+                    },
+                    body: JSON.stringify(link)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Enlace asociado correctamente');
+                        sessionStorage.removeItem('linkToAssociate');
+                        sessionStorage.removeItem('associationToken');
+                        <?php unset($_SESSION['associationToken']); ?>
+                        location.reload();
+                    } else {
+                        alert('Error al asociar el enlace: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error al asociar el enlace');
+                });
+            }
+            <?php endif; ?>
         });
     </script>
 </body>

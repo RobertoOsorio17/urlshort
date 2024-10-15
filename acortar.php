@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'db_connect.php';
+require_once 'config.php';
 
 header('Content-Type: application/json');
 
@@ -18,7 +19,7 @@ function validateDate($date, $format = 'Y-m-d')
 function checkRateLimit($user_id) {
     $rate_limit_file = sys_get_temp_dir() . "/rate_limit_$user_id.txt";
     $current_time = time();
-    $limit = 10; // Número máximo de solicitudes
+    $limit = 100; // Número máximo de solicitudes
     $interval = 3600; // Intervalo de tiempo en segundos (1 hora)
 
     if (file_exists($rate_limit_file)) {
@@ -82,12 +83,21 @@ try {
 
     $urlAcortada = 'http://' . $_SERVER['HTTP_HOST'] . '/' . $codigoUnico;
 
+    error_log("Respuesta JSON en acortar.php: " . json_encode([
+        'url' => $urlAcortada, 
+        'id' => $pdo->lastInsertId(),
+        'expirationDate' => $expirationDateTime,
+        'hasPassword' => $hashedPassword !== null,
+        'url_original' => $urlOriginal
+    ]));
+
     echo json_encode([
         'url' => $urlAcortada, 
         'id' => $pdo->lastInsertId(),
         'expirationDate' => $expirationDateTime,
-        'hasPassword' => $hashedPassword !== null
-    ]);
+        'hasPassword' => $hashedPassword !== null,
+        'url_original' => $urlOriginal
+    ], JSON_UNESCAPED_SLASHES);
 } catch (Exception $e) {
     logError('Error en acortar.php: ' . $e->getMessage());
     echo json_encode(['error' => 'Hubo un error al acortar la URL. Por favor, inténtelo de nuevo. Detalles: ' . $e->getMessage()]);

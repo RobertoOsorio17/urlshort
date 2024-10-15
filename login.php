@@ -2,6 +2,20 @@
 session_start();
 require_once 'db_connect.php';
 
+if (isset($_GET['token'])) {
+    $_SESSION['associationToken'] = $_GET['token'];
+}
+
+if (isset($_SESSION['user_id'])) {
+    if (isset($_SESSION['associationToken'])) {
+        header("Location: dashboard.php?associate=1");
+        exit;
+    } else {
+        header("Location: dashboard.php");
+        exit;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = filter_input(INPUT_POST, 'username', FILTER_SANITIZE_STRING);
     $password = $_POST['password'];
@@ -16,8 +30,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($user && password_verify($password, $user['password'])) {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
-            header("Location: dashboard.php");
-            exit;
+            
+            if (isset($_SESSION['associationToken'])) {
+                header("Location: dashboard.php?associate=1");
+                exit;
+            } else {
+                header("Location: dashboard.php");
+                exit;
+            }
         } else {
             $error = "Nombre de usuario o contraseña incorrectos.";
         }

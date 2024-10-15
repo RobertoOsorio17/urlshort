@@ -1,1 +1,4 @@
 [2024-10-14 00:06:04] Error en acortar.php: SQLSTATE[23000]: Integrity constraint violation: 1048 Column 'user_id' cannot be null
+[2024-10-15 01:55:15] Error en acortar.php: Has excedido el límite de solicitudes. Por favor, inténtalo más tarde.
+[2024-10-15 01:55:21] Error en acortar.php: Has excedido el límite de solicitudes. Por favor, inténtalo más tarde.
+[2024-10-15 02:00:15] Error en acortar.php: Has excedido el límite de solicitudes. Por favor, inténtalo más tarde.
