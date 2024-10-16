@@ -2,6 +2,10 @@
 session_start();
 require_once 'db_connect.php';
 
+// Construir la URL base dinámicamente
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+$base_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . "/";
+
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
@@ -96,6 +100,7 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <link rel="stylesheet" href="https://code.getmdl.io/1.3.0/material.indigo-pink.min.css">
     <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script>
+    <meta name="csrf-token" content="<?php echo $_SESSION['csrf_token']; ?>">
     <style>
         .demo-card-wide.mdl-card {
             width: 100%;
@@ -190,28 +195,49 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
                                 <i class="material-icons">add</i>
                             </button>
                         </div>
-                        <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp" style="width: 100%;">
+                        <div class="mdl-grid">
+                            <div class="mdl-cell mdl-cell--12-col">
+                                <button id="bulk-actions-menu" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-button--accent">
+                                    Acciones masivas
+                                </button>
+                                <ul class="mdl-menu mdl-menu--bottom-left mdl-js-menu mdl-js-ripple-effect" for="bulk-actions-menu">
+                                    <li class="mdl-menu__item" onclick="bulkDelete()">Eliminar seleccionados</li>
+                                    <li class="mdl-menu__item" onclick="bulkExtendExpiration()">Extender expiración</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp">
                             <thead>
                                 <tr>
+                                    <th>
+                                        <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect mdl-data-table__select" for="checkbox-all">
+                                            <input type="checkbox" id="checkbox-all" class="mdl-checkbox__input">
+                                        </label>
+                                    </th>
                                     <th class="mdl-data-table__cell--non-numeric">URL Original</th>
-                                    <th>URL Acortada</th>
+                                    <th class="mdl-data-table__cell--non-numeric">URL Acortada</th>
+                                    <th class="mdl-data-table__cell--non-numeric">Fecha de Expiración</th>
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($enlaces as $enlace): ?>
                                 <tr>
-                                    <td class="mdl-data-table__cell--non-numeric"><?= htmlspecialchars($enlace['url_original']) ?></td>
                                     <td>
-                                        <a href="<?= $enlace['codigo'] ?>" target="_blank">
-                                            <?= 'http://' . $_SERVER['HTTP_HOST'] . '/' . $enlace['codigo'] ?>
-                                        </a>
+                                        <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect mdl-data-table__select" for="checkbox-<?= $enlace['id'] ?>">
+                                            <input type="checkbox" id="checkbox-<?= $enlace['id'] ?>" class="mdl-checkbox__input" value="<?= $enlace['id'] ?>">
+                                        </label>
                                     </td>
+                                    <td class="mdl-data-table__cell--non-numeric"><?= htmlspecialchars($enlace['url_original']) ?></td>
+                                    <td class="mdl-data-table__cell--non-numeric">
+                                        <a href="<?= $base_url . $enlace['codigo'] ?>" target="_blank"><?= $base_url . $enlace['codigo'] ?></a>
+                                    </td>
+                                    <td class="mdl-data-table__cell--non-numeric"><?= $enlace['expiration_date'] ?></td>
                                     <td>
-                                        <button class="mdl-button mdl-js-button mdl-button--icon mdl-button--colored" onclick="openEditModal(<?= $enlace['id'] ?>, '<?= htmlspecialchars($enlace['url_original'], ENT_QUOTES) ?>', '<?= $enlace['expiration_date'] ?>', '<?= $enlace['has_password'] ?>')">
+                                        <button class="mdl-button mdl-js-button mdl-button--icon" onclick="openEditModal(<?= $enlace['id'] ?>, '<?= htmlspecialchars($enlace['url_original'], ENT_QUOTES) ?>', '<?= $enlace['expiration_date'] ?>', '<?= $enlace['has_password'] ?>')">
                                             <i class="material-icons">edit</i>
                                         </button>
-                                        <button class="mdl-button mdl-js-button mdl-button--icon mdl-button--accent" onclick="openDeleteModal(<?= $enlace['id'] ?>)">
+                                        <button class="mdl-button mdl-js-button mdl-button--icon" onclick="openDeleteModal(<?= $enlace['id'] ?>)">
                                             <i class="material-icons">delete</i>
                                         </button>
                                     </td>
@@ -260,6 +286,7 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
                         <label class="mdl-textfield__label" for="editPassword">Nueva contraseña</label>
                     </div>
                 </div>
+                <input type="hidden" id="editRemovePassword" name="removePassword" value="0">
             </form>
         </div>
         <div class="mdl-dialog__actions">
@@ -300,7 +327,7 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
                 </label>
                 <div id="expirationDateContainer" style="display: none;">
                     <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label">
-                        <input class="mdl-textfield__input" type="date" id="expirationDate" name="expirationDate">
+                        <input type="date" id="expirationDate" name="expirationDate" class="mdl-textfield__input" min="<?php echo date('Y-m-d'); ?>">
                         <label class="mdl-textfield__label" for="expirationDate">Fecha de expiración</label>
                     </div>
                     <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label">
@@ -345,16 +372,48 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
         </div>
     </dialog>
 
+    <!-- Modal de confirmación para eliminación masiva -->
+    <dialog class="mdl-dialog" id="bulkDeleteModal">
+        <h4 class="mdl-dialog__title">Confirmar eliminación masiva</h4>
+        <div class="mdl-dialog__content">
+            <p>¿Estás seguro de que quieres eliminar los enlaces seleccionados?</p>
+        </div>
+        <div class="mdl-dialog__actions">
+            <button type="button" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect" onclick="confirmBulkDelete()">Eliminar</button>
+            <button type="button" class="mdl-button mdl-js-button mdl-js-ripple-effect close" onclick="closeBulkDeleteModal()">Cancelar</button>
+        </div>
+    </dialog>
+
+    <!-- Modifica el modal para extender expiración masiva -->
+    <dialog class="mdl-dialog" id="bulkExtendExpirationModal">
+        <h4 class="mdl-dialog__title">Extender expiración</h4>
+        <div class="mdl-dialog__content">
+            <p>¿Cuántos días quieres extender la expiración de los enlaces seleccionados?</p>
+            <div class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label">
+                <input class="mdl-textfield__input" type="number" id="extendDays" min="1" max="365">
+                <label class="mdl-textfield__label" for="extendDays">Número de días (máximo 365)</label>
+            </div>
+        </div>
+        <div class="mdl-dialog__actions">
+            <button type="button" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect" onclick="confirmBulkExtendExpiration()">Extender</button>
+            <button type="button" class="mdl-button mdl-js-button mdl-js-ripple-effect close" onclick="closeBulkExtendExpirationModal()">Cancelar</button>
+        </div>
+    </dialog>
+
     <script>
         var deleteId;
         var editDialog = document.getElementById('editModal');
         var deleteDialog = document.getElementById('deleteModal');
+        var shortenDialog = document.getElementById('shortenModal');
 
         if (!editDialog.showModal) {
             dialogPolyfill.registerDialog(editDialog);
         }
         if (!deleteDialog.showModal) {
             dialogPolyfill.registerDialog(deleteDialog);
+        }
+        if (!shortenDialog.showModal) {
+            dialogPolyfill.registerDialog(shortenDialog);
         }
 
         function openEditModal(id, url, expirationDate, hasPassword) {
@@ -378,7 +437,9 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
             }
             
             editPasswordCheckbox.checked = hasPassword === '1';
-            editPasswordContainer.style.display = hasPassword === '1' ? 'block' : 'none';
+            editPasswordCheckbox.disabled = false; // Siempre habilitado para permitir cambios
+            editPasswordContainer.style.display = editPasswordCheckbox.checked ? 'block' : 'none';
+            document.getElementById('editRemovePassword').value = '0';
             
             editDialog.showModal();
             componentHandler.upgradeElements(editDialog);
@@ -395,7 +456,35 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
         }
 
         function submitEditForm() {
-            document.getElementById('editForm').submit();
+            const formData = new FormData(document.getElementById('editForm'));
+            const editPasswordCheckbox = document.getElementById('editPasswordCheckbox');
+            const editRemovePassword = document.getElementById('editRemovePassword');
+            
+            // Si el checkbox de contraseña está deshabilitado y no está marcado, 
+            // significa que queremos eliminar la contraseña existente
+            if (editPasswordCheckbox.disabled && !editPasswordCheckbox.checked) {
+                formData.append('removePassword', '1');
+            } else {
+                formData.append('removePassword', editRemovePassword.value);
+            }
+
+            fetch('edit_link.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeEditModal();
+                    location.reload();
+                } else {
+                    alert('Error al editar el enlace: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al editar el enlace');
+            });
         }
 
         function openDeleteModal(id) {
@@ -421,12 +510,6 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
             form.submit();
         }
 
-        var shortenDialog = document.getElementById('shortenModal');
-
-        if (!shortenDialog.showModal) {
-            dialogPolyfill.registerDialog(shortenDialog);
-        }
-
         function openShortenModal() {
             document.getElementById('shortenUrl').value = '';
             document.getElementById('shortenError').style.display = 'none';
@@ -436,6 +519,107 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
 
         function closeShortenModal() {
             shortenDialog.close();
+        }
+
+        // Mover estas funciones fuera del evento DOMContentLoaded
+        function bulkDelete() {
+            const selectedIds = getSelectedIds();
+            if (selectedIds.length === 0) {
+                alert('Por favor, selecciona al menos un enlace para eliminar.');
+                return;
+            }
+            openBulkDeleteModal(selectedIds);
+        }
+
+        function bulkExtendExpiration() {
+            const selectedIds = getSelectedIds();
+            if (selectedIds.length === 0) {
+                alert('Por favor, selecciona al menos un enlace para extender su expiración.');
+                return;
+            }
+            openBulkExtendExpirationModal(selectedIds);
+        }
+
+        function getSelectedIds() {
+            return Array.from(document.querySelectorAll('tbody input[type="checkbox"]:checked'))
+                .map(checkbox => checkbox.value);
+        }
+
+        function openBulkDeleteModal(ids) {
+            selectedIdsForBulkActions = ids;
+            const dialog = document.getElementById('bulkDeleteModal');
+            if (!dialog.showModal) {
+                dialogPolyfill.registerDialog(dialog);
+            }
+            dialog.showModal();
+        }
+
+        function closeBulkDeleteModal() {
+            document.getElementById('bulkDeleteModal').close();
+        }
+
+        function confirmBulkDelete() {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]');
+            if (!csrfToken) {
+                console.error('CSRF token not found');
+                alert('Error de seguridad. Por favor, recarga la página e intenta de nuevo.');
+                return;
+            }
+            fetch('bulk_delete.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken.getAttribute('content')
+                },
+                body: JSON.stringify({ ids: selectedIdsForBulkActions })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error al eliminar los enlaces: ' + data.error);
+                }
+            });
+            closeBulkDeleteModal();
+        }
+
+        function openBulkExtendExpirationModal(ids) {
+            selectedIdsForBulkActions = ids;
+            const dialog = document.getElementById('bulkExtendExpirationModal');
+            if (!dialog.showModal) {
+                dialogPolyfill.registerDialog(dialog);
+            }
+            dialog.showModal();
+        }
+
+        function closeBulkExtendExpirationModal() {
+            document.getElementById('bulkExtendExpirationModal').close();
+        }
+
+        function confirmBulkExtendExpiration() {
+            const days = document.getElementById('extendDays').value;
+            if (!days || isNaN(days) || days < 1 || days > 365) {
+                alert('Por favor, introduce un número válido de días (entre 1 y 365).');
+                return;
+            }
+            fetch('bulk_extend_expiration.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ ids: selectedIdsForBulkActions, days: parseInt(days) })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error al extender la expiración: ' + data.error);
+                }
+            });
+            closeBulkExtendExpirationModal();
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -461,7 +645,11 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
             });
 
             editPasswordCheckbox.addEventListener('change', function() {
+                const editPasswordContainer = document.getElementById('editPasswordContainer');
+                const editRemovePassword = document.getElementById('editRemovePassword');
+                
                 editPasswordContainer.style.display = this.checked ? 'block' : 'none';
+                editRemovePassword.value = this.checked ? '0' : '1';
             });
 
             window.submitShortenForm = function() {
@@ -549,22 +737,16 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
             };
 
             window.submitEditForm = function() {
-                const id = document.getElementById('editId').value;
-                const url = document.getElementById('editUrl').value;
-                const expirationDate = document.getElementById('editExpirationDate').value;
-                const expirationTime = document.getElementById('editExpirationTime').value;
-                const password = document.getElementById('editPassword').value;
-
-                const formData = new FormData();
-                formData.append('id', id);
-                formData.append('url', url);
-                formData.append('csrf_token', document.querySelector('#editForm input[name="csrf_token"]').value);
-                if (editExpirationCheckbox.checked && expirationDate) {
-                    formData.append('expirationDate', expirationDate);
-                    formData.append('expirationTime', expirationTime || '23:59');
-                }
-                if (editPasswordCheckbox.checked && password) {
-                    formData.append('password', password);
+                const formData = new FormData(document.getElementById('editForm'));
+                const editPasswordCheckbox = document.getElementById('editPasswordCheckbox');
+                const editRemovePassword = document.getElementById('editRemovePassword');
+                
+                // Si el checkbox de contraseña está deshabilitado y no está marcado, 
+                // significa que queremos eliminar la contraseña existente
+                if (editPasswordCheckbox.disabled && !editPasswordCheckbox.checked) {
+                    formData.append('removePassword', '1');
+                } else {
+                    formData.append('removePassword', editRemovePassword.value);
                 }
 
                 fetch('edit_link.php', {
@@ -573,15 +755,16 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.error) {
-                        // Manejar error
-                    } else {
-                        // Actualizar la fila en la tabla
+                    if (data.success) {
                         closeEditModal();
+                        location.reload();
+                    } else {
+                        alert('Error al editar el enlace: ' + data.error);
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
+                    alert('Error al editar el enlace');
                 });
             };
 
@@ -666,6 +849,17 @@ error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
             <?php endif; ?>
 
             console.log('Modal HTML:', document.querySelector('#associate-modal').outerHTML);
+
+            // Manejar el checkbox principal
+            document.getElementById('checkbox-all').addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('tbody input[type="checkbox"]');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                    if (checkbox.parentNode.classList.contains('is-checked') !== this.checked) {
+                        checkbox.parentNode.classList.toggle('is-checked');
+                    }
+                });
+            });
         });
 
         function associateLinkToAccount(link) {

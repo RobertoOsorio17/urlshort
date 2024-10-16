@@ -32,7 +32,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $passwordUpdate = "";
     $passwordParams = [];
-    if (isset($_POST['password']) && !empty($_POST['password'])) {
+    if (isset($_POST['removePassword']) && $_POST['removePassword'] === '1') {
+        $passwordUpdate = ", password = NULL";
+    } elseif (isset($_POST['password']) && !empty($_POST['password'])) {
         $hashedPassword = password_hash($_POST['password'], PASSWORD_DEFAULT);
         $passwordUpdate = ", password = ?";
         $passwordParams[] = $hashedPassword;
@@ -47,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode([
             'success' => true,
             'expirationDateTime' => $expirationDateTime,
-            'hasPassword' => !empty($passwordParams)
+            'hasPassword' => !empty($passwordParams) || (isset($_POST['removePassword']) && $_POST['removePassword'] !== '1')
         ]);
     } else {
         echo json_encode(['error' => 'No se pudo actualizar el enlace']);

@@ -13,7 +13,7 @@ function logError($message) {
 function validateDate($date, $format = 'Y-m-d')
 {
     $d = DateTime::createFromFormat($format, $date);
-    return $d && $d->format($format) === $date;
+    return $d && $d->format($format) === $date && $d >= new DateTime('today');
 }
 
 function checkRateLimit($user_id) {
@@ -60,12 +60,17 @@ try {
     if ($user_id && isset($_POST['expirationDate']) && !empty($_POST['expirationDate'])) {
         $expirationDate = $_POST['expirationDate'];
         if (!validateDate($expirationDate)) {
-            throw new Exception('Fecha de expiración inválida');
+            throw new Exception('Fecha de expiración inválida o anterior a la fecha actual');
         }
         $expirationTime = isset($_POST['expirationTime']) && !empty($_POST['expirationTime']) 
             ? $_POST['expirationTime'] 
             : '23:59:59';
         $expirationDateTime = date('Y-m-d H:i:s', strtotime("$expirationDate $expirationTime"));
+        
+        // Verificar que la fecha y hora de expiración no sea anterior a la actual
+        if (strtotime($expirationDateTime) <= time()) {
+            throw new Exception('La fecha y hora de expiración no puede ser anterior o igual a la actual');
+        }
     } else {
         // Para usuarios no registrados o sin fecha de expiración, establecer la expiración a 30 días
         $expirationDateTime = date('Y-m-d H:i:s', strtotime('+30 days'));

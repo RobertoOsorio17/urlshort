@@ -70,51 +70,77 @@ if ($codigo) {
     <link rel="stylesheet" href="https://code.getmdl.io/1.3.0/material.indigo-pink.min.css">
     <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script>
     <style>
+        body {
+            background-color: #f5f5f5;
+            font-family: 'Roboto', sans-serif;
+        }
+        .page-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
         .demo-card-wide.mdl-card {
             width: 512px;
-            margin: 2rem auto;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
         }
         .demo-card-wide > .mdl-card__title {
             color: #fff;
             height: 176px;
-            background: url('https://getmdl.io/assets/demos/welcome_card.jpg') center / cover;
+            background: linear-gradient(45deg, #FE6B8B 30%, #FF8E53 90%);
         }
         .mdl-card__supporting-text {
             font-size: 1.1em;
+            color: #333;
+            padding: 24px;
         }
         #countdown {
-            font-size: 2em;
+            font-size: 3em;
             font-weight: bold;
-            color: #3f51b5;
+            color: #FE6B8B;
+            display: block;
+            text-align: center;
+            margin: 20px 0;
         }
         .center {
             text-align: center;
+        }
+        .mdl-button {
+            background-color: #FE6B8B !important;
+        }
+        .mdl-button:hover {
+            background-color: #FF8E53 !important;
         }
     </style>
 </head>
 <body>
     <div class="mdl-layout mdl-js-layout">
         <main class="mdl-layout__content">
-            <div class="demo-card-wide mdl-card mdl-shadow--2dp">
-                <div class="mdl-card__title">
-                    <h2 class="mdl-card__title-text">Redirigiendo...</h2>
-                </div>
-                <div class="mdl-card__supporting-text">
-                    <?php if ($error): ?>
-                        <p><?php echo htmlspecialchars($error); ?></p>
-                    <?php else: ?>
-                        <p>Estás siendo redirigido a:</p>
-                        <p><strong><?php echo htmlspecialchars($urlOriginal); ?></strong></p>
-                        <p>La redirección comenzará en <span id="countdown">5</span> segundos.</p>
-                        <p>Si no eres redirigido automáticamente, haz clic en el botón de abajo.</p>
-                    <?php endif; ?>
-                </div>
-                <div class="mdl-card__actions mdl-card--border center">
-                    <?php if (!$error): ?>
-                        <a href="<?php echo htmlspecialchars($urlOriginal); ?>" class="mdl-button mdl-button--colored mdl-js-button mdl-js-ripple-effect">
-                            Ir ahora
-                        </a>
-                    <?php endif; ?>
+            <div class="page-content">
+                <div class="demo-card-wide mdl-card mdl-shadow--2dp">
+                    <div class="mdl-card__title">
+                        <h2 class="mdl-card__title-text">Redirigiendo...</h2>
+                    </div>
+                    <div class="mdl-card__supporting-text">
+                        <?php if ($error): ?>
+                            <p><?php echo htmlspecialchars($error); ?></p>
+                        <?php else: ?>
+                            <p>Estás siendo redirigido a:</p>
+                            <p><strong><?php echo htmlspecialchars($urlOriginal); ?></strong></p>
+                            <span id="countdown">5</span>
+                            <p>La redirección comenzará en segundos.</p>
+                            <p>Si no eres redirigido automáticamente, haz clic en el botón de abajo.</p>
+                        <?php endif; ?>
+                    </div>
+                    <div class="mdl-card__actions mdl-card--border center">
+                        <?php if (!$error): ?>
+                            <a href="<?php echo htmlspecialchars($urlOriginal); ?>" class="mdl-button mdl-button--colored mdl-js-button mdl-js-ripple-effect">
+                                Ir ahora
+                            </a>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </main>
