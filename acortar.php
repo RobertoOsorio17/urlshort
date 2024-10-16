@@ -39,7 +39,7 @@ function checkRateLimit($user_id) {
 }
 
 try {
-    $user_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'anonymous';
+    $user_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : null;
     checkRateLimit($user_id);
 
     // Validación de URL

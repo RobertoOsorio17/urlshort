@@ -7,13 +7,9 @@ if (isset($_GET['token'])) {
 }
 
 if (isset($_SESSION['user_id'])) {
-    if (isset($_SESSION['associationToken'])) {
-        header("Location: dashboard.php?associate=1");
-        exit;
-    } else {
-        header("Location: dashboard.php");
-        exit;
-    }
+    $associate = isset($_SESSION['associationToken']) ? '?associate=1' : '';
+    header("Location: dashboard.php" . $associate);
+    exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

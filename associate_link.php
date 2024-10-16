@@ -2,44 +2,66 @@
 session_start();
 require_once 'db_connect.php';
 
-// Verificar si el usuario está autenticado
-if (!isset($_SESSION['user_id'])) {
-    die(json_encode(['error' => 'Usuario no autenticado']));
-}
+header('Content-Type: application/json');
 
-// Verificar el token CSRF
-if (!isset($_SERVER['HTTP_X_CSRF_TOKEN']) || $_SERVER['HTTP_X_CSRF_TOKEN'] !== $_SESSION['csrf_token']) {
-    die(json_encode(['error' => 'Token CSRF inválido']));
-}
+try {
+    // Verificar si el usuario está autenticado
+    if (!isset($_SESSION['user_id'])) {
+        throw new Exception('Usuario no autenticado');
+    }
 
-// Obtener y validar los datos del enlace
-$data = json_decode(file_get_contents('php://input'), true);
-if (!isset($data['url_original']) || !isset($data['url'])) {
-    die(json_encode(['error' => 'Datos del enlace inválidos']));
-}
+    // Verificar el token CSRF
+    if (!isset($_SERVER['HTTP_X_CSRF_TOKEN']) || $_SERVER['HTTP_X_CSRF_TOKEN'] !== $_SESSION['csrf_token']) {
+        throw new Exception('Token CSRF inválido');
+    }
 
-$url_original = filter_var($data['url_original'], FILTER_VALIDATE_URL);
-$url_corta = filter_var($data['url'], FILTER_SANITIZE_URL);
-$user_id = $_SESSION['user_id'];
+    error_log('CSRF Token recibido: ' . ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? 'No recibido'));
+    error_log('CSRF Token esperado: ' . ($_SESSION['csrf_token'] ?? 'No establecido'));
 
-if (!$url_original || !$url_corta) {
-    die(json_encode(['error' => 'URLs inválidas']));
-}
+    // Obtener y validar los datos del enlace
+    $data = json_decode(file_get_contents('php://input'), true);
+    if (!isset($data['url_original']) || !isset($data['url'])) {
+        throw new Exception('Datos del enlace inválidos');
+    }
 
-// Extraer el código de la URL corta
-$codigo = basename($url_corta);
+    $url_original = filter_var($data['url_original'], FILTER_VALIDATE_URL);
+    $url_corta = filter_var($data['url'], FILTER_SANITIZE_URL);
+    $user_id = $_SESSION['user_id'];
 
-// Verificar si el enlace ya existe para este usuario
-$stmt = $pdo->prepare("SELECT id FROM enlaces WHERE codigo = ? AND user_id = ?");
-$stmt->execute([$codigo, $user_id]);
-if ($stmt->fetch()) {
-    die(json_encode(['error' => 'Este enlace ya está asociado a tu cuenta']));
-}
+    if (!$url_original || !$url_corta) {
+        throw new Exception('URLs inválidas');
+    }
 
-// Insertar el enlace en la base de datos
-$stmt = $pdo->prepare("INSERT INTO enlaces (codigo, url_original, user_id) VALUES (?, ?, ?)");
-if ($stmt->execute([$codigo, $url_original, $user_id])) {
+    // Extraer el código de la URL corta
+    $codigo = basename($url_corta);
+
+    // Verificar si el enlace ya existe
+    $stmt = $pdo->prepare("SELECT id, user_id FROM enlaces WHERE codigo = ?");
+    $stmt->execute([$codigo]);
+    $enlace_existente = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($enlace_existente) {
+        if ($enlace_existente['user_id'] == $user_id) {
+            throw new Exception('Este enlace ya está asociado a tu cuenta');
+        } else if ($enlace_existente['user_id'] !== null) {
+            throw new Exception('Este enlace ya está asociado a otra cuenta');
+        } else {
+            // El enlace existe pero no está asociado a ningún usuario, lo asociamos
+            $stmt = $pdo->prepare("UPDATE enlaces SET user_id = ? WHERE codigo = ?");
+            if (!$stmt->execute([$user_id, $codigo])) {
+                throw new Exception('Error al asociar el enlace a tu cuenta');
+            }
+        }
+    } else {
+        // El enlace no existe, lo insertamos
+        $stmt = $pdo->prepare("INSERT INTO enlaces (codigo, url_original, user_id) VALUES (?, ?, ?)");
+        if (!$stmt->execute([$codigo, $url_original, $user_id])) {
+            throw new Exception('Error al insertar el enlace en la base de datos');
+        }
+    }
+
     echo json_encode(['success' => true]);
-} else {
-    echo json_encode(['error' => 'Error al asociar el enlace']);
+} catch (Exception $e) {
+    error_log('Error en associate_link.php: ' . $e->getMessage());
+    echo json_encode(['error' => $e->getMessage()]);
 }

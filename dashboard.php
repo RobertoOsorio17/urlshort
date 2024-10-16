@@ -16,9 +16,17 @@ $user_id = $_SESSION['user_id'];
 
 // Manejar la asociación de enlaces
 $showAssociateModal = false;
-if (isset($_GET['associate']) && isset($_SESSION['associationToken'])) {
-    $showAssociateModal = true;
-    $associationToken = $_SESSION['associationToken'];
+if (isset($_GET['associate']) && $_GET['associate'] == '1') {
+    if (isset($_SESSION['associationToken'])) {
+        $showAssociateModal = true;
+        $associationToken = $_SESSION['associationToken'];
+    } else {
+        // El usuario intentó acceder a associate=1 sin un token válido
+        error_log("Intento de asociación sin token válido para el usuario ID: " . $_SESSION['user_id']);
+        // Opcionalmente, puedes redirigir al usuario o mostrar un mensaje de error
+        // header("Location: dashboard.php");
+        // exit;
+    }
 }
 
 // Obtener los enlaces del usuario
@@ -62,13 +70,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
 }
 
 // Al principio del archivo
-if (isset($_GET['associate']) && isset($_SESSION['associationToken'])) {
+if (isset($_SESSION['associationToken'])) {
     $showAssociateModal = true;
     $associationToken = $_SESSION['associationToken'];
     // No elimines el token aquí, lo haremos después de asociar el enlace
 } else {
     $showAssociateModal = false;
 }
+
+// Al principio del archivo
+error_log('GET parameters: ' . print_r($_GET, true));
+error_log('SESSION: ' . print_r($_SESSION, true));
+
+error_log('Session ID: ' . session_id());
+error_log('User ID: ' . ($_SESSION['user_id'] ?? 'No establecido'));
 ?>
 
 
@@ -317,10 +332,16 @@ if (isset($_GET['associate']) && isset($_SESSION['associationToken'])) {
         <h4 class="mdl-dialog__title">Asociar enlace</h4>
         <div class="mdl-dialog__content">
             <p>¿Estás seguro de que quieres asociar este enlace a tu cuenta?</p>
+            <p><strong>URL original:</strong> <span id="original-url"></span></p>
+            <p><strong>URL acortada:</strong> <span id="short-url"></span></p>
         </div>
         <div class="mdl-dialog__actions">
-            <button type="button" class="mdl-button confirm-associate">Asociar</button>
-            <button type="button" class="mdl-button close">Cancelar</button>
+            <button type="button" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect confirm-associate">
+                Asociar
+            </button>
+            <button type="button" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect close">
+                Cancelar
+            </button>
         </div>
     </dialog>
 
@@ -611,60 +632,76 @@ if (isset($_GET['associate']) && isset($_SESSION['associationToken'])) {
             }
 
             <?php if ($showAssociateModal): ?>
-            document.addEventListener('DOMContentLoaded', function() {
-                console.log('DOMContentLoaded event fired');
-                console.log('showAssociateModal:', <?php echo json_encode($showAssociateModal); ?>);
-                console.log('associationToken:', <?php echo json_encode($associationToken); ?>);
-                console.log('linkToAssociate:', sessionStorage.getItem('linkToAssociate'));
+            console.log('showAssociateModal:', <?php echo json_encode($showAssociateModal); ?>);
+            console.log('associationToken:', <?php echo json_encode($associationToken ?? null); ?>);
+            console.log('linkToAssociate:', sessionStorage.getItem('linkToAssociate'));
 
-                const linkToAssociate = JSON.parse(sessionStorage.getItem('linkToAssociate'));
-                if (linkToAssociate) {
-                    const dialog = document.querySelector('#associate-modal');
-                    if (!dialog.showModal) {
-                        dialogPolyfill.registerDialog(dialog);
-                    }
-                    dialog.querySelector('.confirm-associate').onclick = function() {
-                        associateLinkToAccount(linkToAssociate);
-                        dialog.close();
-                    };
-                    dialog.querySelector('.close').onclick = function() {
-                        dialog.close();
-                        sessionStorage.removeItem('linkToAssociate');
-                        sessionStorage.removeItem('associationToken');
-                        <?php unset($_SESSION['associationToken']); ?>
-                    };
-                    dialog.showModal();
+            const linkToAssociate = JSON.parse(sessionStorage.getItem('linkToAssociate'));
+            if (linkToAssociate) {
+                const dialog = document.querySelector('#associate-modal');
+                if (!dialog.showModal) {
+                    dialogPolyfill.registerDialog(dialog);
                 }
-            });
-
-            function associateLinkToAccount(link) {
-                fetch('associate_link.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': '<?php echo $_SESSION["csrf_token"]; ?>'
-                    },
-                    body: JSON.stringify(link)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Enlace asociado correctamente');
-                        sessionStorage.removeItem('linkToAssociate');
-                        sessionStorage.removeItem('associationToken');
-                        <?php unset($_SESSION['associationToken']); ?>
-                        location.reload();
-                    } else {
-                        alert('Error al asociar el enlace: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error al asociar el enlace');
-                });
+                
+                // Actualizar el contenido del modal con los detalles del enlace
+                dialog.querySelector('#original-url').textContent = linkToAssociate.url_original;
+                dialog.querySelector('#short-url').textContent = linkToAssociate.url;
+                
+                dialog.querySelector('.confirm-associate').onclick = function() {
+                    associateLinkToAccount(linkToAssociate);
+                    dialog.close();
+                };
+                dialog.querySelector('.close').onclick = function() {
+                    dialog.close();
+                    sessionStorage.removeItem('linkToAssociate');
+                    sessionStorage.removeItem('associationToken');
+                    <?php unset($_SESSION['associationToken']); ?>
+                };
+                
+                // Actualizar los botones para el efecto ripple
+                componentHandler.upgradeElements(dialog.querySelectorAll('.mdl-button'));
+                
+                dialog.showModal();
             }
             <?php endif; ?>
+
+            console.log('Modal HTML:', document.querySelector('#associate-modal').outerHTML);
         });
+
+        function associateLinkToAccount(link) {
+            console.log('linkToAssociate:', link);
+            fetch('associate_link.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': '<?php echo $_SESSION["csrf_token"]; ?>'
+                },
+                body: JSON.stringify(link)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Enlace asociado correctamente');
+                    sessionStorage.removeItem('linkToAssociate');
+                    sessionStorage.removeItem('associationToken');
+                    <?php unset($_SESSION['associationToken']); ?>
+                    location.reload();
+                } else {
+                    alert('Error al asociar el enlace: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al asociar el enlace');
+            });
+        }
+
+        // Asegúrate de que este código esté fuera de cualquier evento o función
+        document.addEventListener('DOMContentLoaded', function() {
+            componentHandler.upgradeDom();
+        });
+
+        console.log('CSRF Token:', '<?php echo $_SESSION["csrf_token"]; ?>');
     </script>
 </body>
 </html>
